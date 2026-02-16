@@ -5,6 +5,11 @@ A video playback application for NextUI featuring local file playback, YouTube s
 - **tg5040** - TrimUI Smart Pro / TrimUI Brick / Brick Hammer
 - **tg5050** - TrimUI Smart Pro S
 
+[![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/Y8Y61SI04B)
+
+![main](https://github.com/user-attachments/assets/814a2dd3-fe75-4f8e-a9cf-1e53a7c74033)
+
+
 ## Installation
 
 ### Manual Installation
@@ -24,7 +29,7 @@ A video playback application for NextUI featuring local file playback, YouTube s
 
 ## Update
 
-1) You can update the application directly via `Settings > About` page in the application.
+1) You can update the application directly via `Settings` page in the application.
 2) Or, you can update via `Pak Store`.
 
 ## Features
@@ -78,7 +83,7 @@ A video playback application for NextUI featuring local file playback, YouTube s
 - Navigate to `YouTube` from the main menu
 - Use the on-screen keyboard to search for videos
 - Select a video to stream
-- Press `Y` to subscribe to a channel
+- Press `D-Pad Up` to subscribe to a channel
 
 ### IPTV
 - Navigate to `Online TV` from the main menu
