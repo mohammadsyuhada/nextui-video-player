@@ -1,0 +1,10 @@
+.DS_Store
+log.txt
+state/NextUI.code-workspace
+.vscode/
+.claude/
+.vscode/settings.json
+BUILD.md
+src/opus_obj/
+bin/tg5040/videoplayer.elf
+bin/tg5050/videoplayer.elf

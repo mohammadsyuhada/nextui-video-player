@@ -1,0 +1,157 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+#include <sys/stat.h>
+
+#include "vp_defines.h"
+#include "api.h"
+#include "module_common.h"
+#include "module_player.h"
+#include "video_browser.h"
+#include "ffplay_engine.h"
+#include "ui_player.h"
+#include "ui_fonts.h"
+#include "ui_icons.h"
+#include "ui_utils.h"
+
+// Browser scroll text state (for selected item marquee)
+static ScrollTextState browser_scroll = {0};
+
+// Helper: load directory into browser context
+static void load_video_directory(VideoBrowserContext* browser, const char* path) {
+    VideoBrowser_loadDirectory(browser, path, VIDEO_ROOT);
+}
+
+ModuleExitReason PlayerModule_run(SDL_Surface* screen) {
+    VideoBrowserContext browser;
+    memset(&browser, 0, sizeof(browser));
+
+    int dirty = 1;
+    int show_setting = 0;
+
+    // Create video root if needed and load initial directory
+    mkdir(VIDEO_ROOT, 0755);
+    load_video_directory(&browser, VIDEO_ROOT);
+
+    // Reset browser scroll state
+    memset(&browser_scroll, 0, sizeof(browser_scroll));
+
+    while (1) {
+        PAD_poll();
+
+        // Handle global input (START dialogs, volume, etc.)
+        GlobalInputResult global = ModuleCommon_handleGlobalInput(screen, &show_setting, STATE_BROWSER);
+        if (global.should_quit) {
+            VideoBrowser_freeEntries(&browser);
+            return MODULE_EXIT_QUIT;
+        }
+        if (global.input_consumed) {
+            if (global.dirty) dirty = 1;
+            GFX_sync();
+            continue;
+        }
+
+        // Browser navigation
+        if (PAD_justPressed(BTN_B)) {
+            // Go up or exit to menu
+            if (strcmp(browser.current_path, VIDEO_ROOT) != 0) {
+                // Navigate to parent directory
+                char* last_slash = strrchr(browser.current_path, '/');
+                if (last_slash && last_slash != browser.current_path) {
+                    *last_slash = '\0';
+                    load_video_directory(&browser, browser.current_path);
+                } else {
+                    load_video_directory(&browser, VIDEO_ROOT);
+                }
+                GFX_clearLayers(LAYER_SCROLLTEXT);
+                dirty = 1;
+            } else {
+                // At root, return to main menu
+                GFX_clearLayers(LAYER_SCROLLTEXT);
+                VideoBrowser_freeEntries(&browser);
+                return MODULE_EXIT_TO_MENU;
+            }
+        }
+        else if (browser.entry_count > 0) {
+            if (PAD_justRepeated(BTN_UP)) {
+                browser.selected = (browser.selected > 0) ? browser.selected - 1 : browser.entry_count - 1;
+                dirty = 1;
+            }
+            else if (PAD_justRepeated(BTN_DOWN)) {
+                browser.selected = (browser.selected < browser.entry_count - 1) ? browser.selected + 1 : 0;
+                dirty = 1;
+            }
+            else if (PAD_justPressed(BTN_A)) {
+                VideoFileEntry* entry = &browser.entries[browser.selected];
+
+                if (entry->is_dir) {
+                    // Open directory (handle ".." parent entry too)
+                    char path_copy[512];
+                    snprintf(path_copy, sizeof(path_copy), "%s", entry->path);
+                    load_video_directory(&browser, path_copy);
+                    GFX_clearLayers(LAYER_SCROLLTEXT);
+                    dirty = 1;
+                } else {
+                    // Play video file via ffplay
+                    FfplayConfig config;
+                    memset(&config, 0, sizeof(config));
+                    config.source = FFPLAY_SOURCE_LOCAL;
+                    config.is_stream = false;
+                    config.start_position_sec = 0;
+                    strncpy(config.path, entry->path, sizeof(config.path) - 1);
+                    config.path[sizeof(config.path) - 1] = '\0';
+
+                    // Find matching subtitle file, or use video itself for embedded subs
+                    char sub_path[512];
+                    sub_path[0] = '\0';
+                    if (VideoBrowser_findSubtitle(entry->path, sub_path, sizeof(sub_path))) {
+                        strncpy(config.subtitle_path, sub_path, sizeof(config.subtitle_path) - 1);
+                        config.subtitle_path[sizeof(config.subtitle_path) - 1] = '\0';
+                    } else {
+                        // No external subtitle found - use the video file itself
+                        // to render embedded subtitles (e.g. MKV with embedded SRT/ASS)
+                        strncpy(config.subtitle_path, entry->path, sizeof(config.subtitle_path) - 1);
+                        config.subtitle_path[sizeof(config.subtitle_path) - 1] = '\0';
+                    }
+
+                    // Disable autosleep during playback
+                    ModuleCommon_setAutosleepDisabled(true);
+
+                    // Launch ffplay (releases PAD, waits, re-inits PAD)
+                    // GFX is NOT released to avoid double-free bug in shared code
+                    FfplayEngine_play(&config);
+
+                    // Reset scroll state and force full redraw
+                    memset(&browser_scroll, 0, sizeof(browser_scroll));
+                    dirty = 1;
+                }
+            }
+        }
+
+        // Animate browser scroll text (GPU mode)
+        if (ScrollText_isScrolling(&browser_scroll)) {
+            ScrollText_animateOnly(&browser_scroll);
+        }
+        if (ScrollText_needsRender(&browser_scroll)) {
+            dirty = 1;
+        }
+
+        // Handle power management
+        ModuleCommon_PWR_update(&dirty, &show_setting);
+
+        // Render
+        if (dirty) {
+            render_video_browser(screen, show_setting, &browser, &browser_scroll);
+
+            if (show_setting) {
+                GFX_blitHardwareHints(screen, show_setting);
+            }
+
+            GFX_flip(screen);
+            dirty = 0;
+        } else {
+            GFX_sync();
+        }
+    }
+}

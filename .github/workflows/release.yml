@@ -1,0 +1,56 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout NextUI (build dependencies)
+        uses: actions/checkout@v4
+        with:
+          repository: mohammadsyuhada/NextUI
+          path: NextUI
+
+      - name: Checkout Video Player
+        uses: actions/checkout@v4
+        with:
+          path: NextUI/workspace/nextui-video-player
+
+      - name: Build for tg5040
+        run: |
+          docker run --rm \
+            -v ${{ github.workspace }}/NextUI/workspace:/root/workspace \
+            ghcr.io/loveretro/tg5040-toolchain:latest \
+            /bin/bash -c 'source ~/.bashrc && cd /root/workspace/tg5040/libmsettings && make build CROSS_COMPILE=aarch64-nextui-linux-gnu- PREFIX=/opt/nextui PREFIX_LOCAL=/opt/nextui && cd /root/workspace/nextui-video-player/src && make PLATFORM=tg5040'
+
+      - name: Build for tg5050
+        run: |
+          docker run --rm \
+            -v ${{ github.workspace }}/NextUI/workspace:/root/workspace \
+            ghcr.io/loveretro/tg5040-toolchain:latest \
+            /bin/bash -c 'source ~/.bashrc && cd /root/workspace/tg5050/libmsettings && make build CROSS_COMPILE=aarch64-nextui-linux-gnu- PREFIX=/opt/nextui PREFIX_LOCAL=/opt/nextui && cd /root/workspace/nextui-video-player/src && make PLATFORM=tg5050'
+
+      - name: Package release zip
+        run: |
+          cd ${{ github.workspace }}/NextUI/workspace/nextui-video-player
+          rm -rf .github src ffplay .git .gitignore LICENSE README.md
+          zip -r ../Video.Player.pak.zip .
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VERSION=${GITHUB_REF#refs/tags/}
+          gh release create "$VERSION" \
+            --repo ${{ github.repository }} \
+            --title "$VERSION" \
+            --generate-notes \
+            "${{ github.workspace }}/NextUI/workspace/Video.Player.pak.zip"
