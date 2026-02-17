@@ -1,12 +1,13 @@
 {
   "name": "Video Player",
-  "version": "v1.0.0",
+  "version": "v1.0.1",
   "type": "TOOL",
   "description": "A video playback application for NextUI featuring local video playback, YouTube streaming, and online TV.",
   "author": "mohammadsyuhada",
   "repo_url": "https://github.com/mohammadsyuhada/nextui-video-player",
   "release_filename": "Video.Player.pak.zip",
   "changelog": {
+    "v1.0.1": "Added external subtitle and bluetooth support. Also several bug fixes",
     "v1.0.0": "Initial release with local video playback, YouTube streaming, and online TV support"
   },
   "screenshots": [
