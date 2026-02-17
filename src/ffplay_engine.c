@@ -35,7 +35,7 @@ static int is_bluetooth_audio(void) {
 
 // Build argv for ffplay and exec in a forked child. Returns exit status.
 static int ffplay_exec(FfplayConfig* config, int use_subs) {
-    char* argv[32];
+    char* argv[64];
     int argc = 0;
 
     argv[argc++] = FFPLAY_PATH;
@@ -52,12 +52,33 @@ static int ffplay_exec(FfplayConfig* config, int use_subs) {
         argv[argc++] = seek_str;
     }
 
-    // Subtitle filter
-    // fontsdir: system fontconfig has no fonts, so point to our bundled font
-    // force_style: only for external subs (SRT has no styling); skip for embedded
-    //              ASS/SSA which have their own fonts and positioning
+    // Subtitle filters
+    // When multiple external subs are available, each becomes a separate -vf entry
+    // plus one empty -vf for "subtitles off". D-pad DOWN cycles through them in ffplay.
+    char vf_strs[MAX_SUBTITLE_FILES + 1][1024];
     char vf_str[1024];
-    if (use_subs && config->subtitle_path[0] != '\0') {
+
+    if (use_subs && config->subtitle_count > 0) {
+        // Disable embedded subtitle streams — external vfilters handle subtitles instead.
+        // Without this, embedded subs render on top and hide external subtitle changes.
+        argv[argc++] = "-sn";
+        // Multiple external subtitle files — one -vf per file + empty for "off"
+        for (int i = 0; i < config->subtitle_count; i++) {
+            snprintf(vf_strs[i], sizeof(vf_strs[0]),
+                     "subtitles='%s':fontsdir='%s/fonts':force_style='Fontname=Rounded Mplus 1c Bold,FontSize=32'",
+                     config->subtitle_paths[i], APP_RES_PATH);
+            argv[argc++] = "-vf";
+            argv[argc++] = vf_strs[i];
+        }
+        // Empty vfilter entry = subtitles off
+        vf_strs[config->subtitle_count][0] = '\0';
+        argv[argc++] = "-vf";
+        argv[argc++] = vf_strs[config->subtitle_count];
+    } else if (use_subs && config->subtitle_path[0] != '\0') {
+        // Single subtitle (legacy path: embedded or single external)
+        // fontsdir: system fontconfig has no fonts, so point to our bundled font
+        // force_style: only for external subs (SRT has no styling); skip for embedded
+        //              ASS/SSA which have their own fonts and positioning
         if (config->subtitle_is_external) {
             snprintf(vf_str, sizeof(vf_str),
                      "subtitles='%s':fontsdir='%s/fonts':force_style='Fontname=Rounded Mplus 1c Bold,FontSize=32'",
@@ -102,6 +123,7 @@ static int ffplay_exec(FfplayConfig* config, int use_subs) {
     argv[argc++] = "-i";
     argv[argc++] = config->path;
     argv[argc] = NULL;
+
 
     // Set up Bluetooth audio routing before fork
     int bt_audio = is_bluetooth_audio();
@@ -167,7 +189,8 @@ int FfplayEngine_play(FfplayConfig* config) {
     // GFX is NOT released — ffplay opens its own SDL2 display independently.
     PAD_quit();
 
-    int exit_code = ffplay_exec(config, config->subtitle_path[0] != '\0');
+    int has_subs = (config->subtitle_path[0] != '\0') || (config->subtitle_count > 0);
+    int exit_code = ffplay_exec(config, has_subs);
 
     // Re-initialize input and clear stale button states
     PAD_init();

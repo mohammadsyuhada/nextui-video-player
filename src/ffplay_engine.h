@@ -2,6 +2,7 @@
 #define __FFPLAY_ENGINE_H__
 
 #include <stdbool.h>
+#include "video_browser.h"  // for MAX_SUBTITLE_FILES
 
 typedef enum {
     FFPLAY_SOURCE_LOCAL,
@@ -17,6 +18,11 @@ typedef struct {
     int start_position_sec;   // Seek position (0 = start)
     FfplaySourceType source;  // LOCAL or STREAM
     bool is_stream;           // Stream mode flag
+
+    // Multi-subtitle support: each entry becomes a separate -vf argument
+    int subtitle_count;
+    char subtitle_paths[MAX_SUBTITLE_FILES][512];
+    char subtitle_labels[MAX_SUBTITLE_FILES][32];
 } FfplayConfig;
 
 // Play a video using ffplay subprocess

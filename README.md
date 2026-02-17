@@ -72,7 +72,8 @@ A video playback application for NextUI featuring local file playback, YouTube s
 - **A Button**: Play/Pause
 - **B Button**: Stop and return to browser
 - **D-Pad Left/Right**: Seek ±10 seconds (hold for continuous seek)
-- **D-Pad Up/Down**: Seek ±60 seconds (hold for continuous seek)
+- **D-Pad Up**: Cycle audio track
+- **D-Pad Down**: Cycle subtitle track
 
 ## Usage
 
