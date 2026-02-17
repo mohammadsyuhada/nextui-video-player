@@ -173,6 +173,7 @@ ModuleExitReason YouTubeModule_run(SDL_Surface* screen) {
                 config.source = FFPLAY_SOURCE_STREAM;
                 config.is_stream = true;
                 config.start_position_sec = 0;
+                config.screen_width = screen->w;
                 strncpy(config.path, op->resolved_url, sizeof(config.path) - 1);
 
                 // Set window title to video title

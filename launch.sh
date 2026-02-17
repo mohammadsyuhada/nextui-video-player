@@ -7,10 +7,10 @@ cd "$DIR"
 
 export LD_LIBRARY_PATH="$DIR:$DIR/bin:$DIR/bin/$PLATFORM:/rom/usr/trimui/lib:/usr/lib:$LD_LIBRARY_PATH"
 
-# Set CPU frequency for video player (needs higher ceiling for video processing)
-echo ondemand > /sys/devices/system/cpu/cpu0/cpufreq/scaling_governor 2>/dev/null
-echo 408000 > /sys/devices/system/cpu/cpu0/cpufreq/scaling_min_freq 2>/dev/null
-echo 2000000 > /sys/devices/system/cpu/cpu0/cpufreq/scaling_max_freq 2>/dev/null
+# Lock CPU at 2GHz for video decoding — userspace governor with fixed frequency
+# has no scaling overhead and ensures max performance from the first frame
+echo userspace > /sys/devices/system/cpu/cpu0/cpufreq/scaling_governor 2>/dev/null
+echo 2000000 > /sys/devices/system/cpu/cpu0/cpufreq/scaling_setspeed 2>/dev/null
 
 export SDL_NOMOUSE=1
 export HOME=/mnt/SDCARD
@@ -20,3 +20,6 @@ mkdir -p /mnt/SDCARD/Videos
 
 # Run the platform-specific binary
 "$DIR/bin/$PLATFORM/videoplayer.elf" &> "$LOGS_PATH/video-player.txt"
+
+# Restore default governor on exit
+echo ondemand > /sys/devices/system/cpu/cpu0/cpufreq/scaling_governor 2>/dev/null

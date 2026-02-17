@@ -377,3 +377,36 @@ void VideoBrowser_findSubtitles(const char* video_path, SubtitleList* list) {
 
     closedir(dir);
 }
+
+// Detect if a video file uses HEVC/H.265 codec by scanning the container header.
+// MKV stores "V_MPEGH/ISO/HEVC" as ASCII; MP4 uses "hev1"/"hvc1" FourCC tags.
+// Reads up to 256KB — BluRay rips can have large metadata (chapters, cover art,
+// tags) before the track entries, so 16KB isn't always enough.
+#define HEVC_PROBE_SIZE (256 * 1024)
+bool VideoBrowser_isHEVC(const char* path) {
+    FILE* f = fopen(path, "rb");
+    if (!f) return false;
+
+    unsigned char* buf = malloc(HEVC_PROBE_SIZE);
+    if (!buf) { fclose(f); return false; }
+
+    size_t n = fread(buf, 1, HEVC_PROBE_SIZE, f);
+    fclose(f);
+
+    bool found = false;
+    for (size_t i = 0; i + 4 <= n; i++) {
+        // MKV: "V_MPEGH/ISO/HEVC" — check for "HEVC" substring
+        if (buf[i] == 'H' && buf[i+1] == 'E' && buf[i+2] == 'V' && buf[i+3] == 'C') {
+            found = true; break;
+        }
+        // MP4: "hev1" or "hvc1" FourCC
+        if (buf[i] == 'h' && buf[i+1] == 'e' && buf[i+2] == 'v' && buf[i+3] == '1') {
+            found = true; break;
+        }
+        if (buf[i] == 'h' && buf[i+1] == 'v' && buf[i+2] == 'c' && buf[i+3] == '1') {
+            found = true; break;
+        }
+    }
+    free(buf);
+    return found;
+}
