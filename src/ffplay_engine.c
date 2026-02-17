@@ -52,6 +52,14 @@ static int ffplay_exec(FfplayConfig* config, int use_subs) {
         argv[argc++] = seek_str;
     }
 
+    // Cap decode resolution to screen width — decoding at higher resolution than
+    // the display is wasted CPU. min(w,iw) is a no-op for content already <= screen.
+    char scale_filter[128] = "";
+    if (config->screen_width > 0) {
+        snprintf(scale_filter, sizeof(scale_filter),
+                 "scale='min(%d,iw)':-2:flags=fast_bilinear", config->screen_width);
+    }
+
     // Subtitle filters
     // When multiple external subs are available, each becomes a separate -vf entry
     // plus one empty -vf for "subtitles off". D-pad DOWN cycles through them in ffplay.
@@ -64,16 +72,28 @@ static int ffplay_exec(FfplayConfig* config, int use_subs) {
         argv[argc++] = "-sn";
         // Multiple external subtitle files — one -vf per file + empty for "off"
         for (int i = 0; i < config->subtitle_count; i++) {
-            snprintf(vf_strs[i], sizeof(vf_strs[0]),
-                     "subtitles='%s':fontsdir='%s/fonts':force_style='Fontname=Rounded Mplus 1c Bold,FontSize=32'",
-                     config->subtitle_paths[i], APP_RES_PATH);
+            if (scale_filter[0]) {
+                snprintf(vf_strs[i], sizeof(vf_strs[0]),
+                         "%s,subtitles='%s':fontsdir='%s/fonts':force_style='Fontname=Rounded Mplus 1c Bold,FontSize=32'",
+                         scale_filter, config->subtitle_paths[i], APP_RES_PATH);
+            } else {
+                snprintf(vf_strs[i], sizeof(vf_strs[0]),
+                         "subtitles='%s':fontsdir='%s/fonts':force_style='Fontname=Rounded Mplus 1c Bold,FontSize=32'",
+                         config->subtitle_paths[i], APP_RES_PATH);
+            }
             argv[argc++] = "-vf";
             argv[argc++] = vf_strs[i];
         }
-        // Empty vfilter entry = subtitles off
-        vf_strs[config->subtitle_count][0] = '\0';
-        argv[argc++] = "-vf";
-        argv[argc++] = vf_strs[config->subtitle_count];
+        // "Subtitles off" entry — still apply scale filter if set
+        if (scale_filter[0]) {
+            snprintf(vf_strs[config->subtitle_count], sizeof(vf_strs[0]), "%s", scale_filter);
+            argv[argc++] = "-vf";
+            argv[argc++] = vf_strs[config->subtitle_count];
+        } else {
+            vf_strs[config->subtitle_count][0] = '\0';
+            argv[argc++] = "-vf";
+            argv[argc++] = vf_strs[config->subtitle_count];
+        }
     } else if (use_subs && config->subtitle_path[0] != '\0') {
         // Single subtitle (legacy path: embedded or single external)
         // fontsdir: system fontconfig has no fonts, so point to our bundled font
@@ -81,15 +101,26 @@ static int ffplay_exec(FfplayConfig* config, int use_subs) {
         //              ASS/SSA which have their own fonts and positioning
         if (config->subtitle_is_external) {
             snprintf(vf_str, sizeof(vf_str),
-                     "subtitles='%s':fontsdir='%s/fonts':force_style='Fontname=Rounded Mplus 1c Bold,FontSize=32'",
+                     "%s%ssubtitles='%s':fontsdir='%s/fonts':force_style='Fontname=Rounded Mplus 1c Bold,FontSize=32'",
+                     scale_filter, scale_filter[0] ? "," : "",
                      config->subtitle_path, APP_RES_PATH);
         } else {
             snprintf(vf_str, sizeof(vf_str),
-                     "subtitles='%s':fontsdir='%s/fonts'",
+                     "%s%ssubtitles='%s':fontsdir='%s/fonts'",
+                     scale_filter, scale_filter[0] ? "," : "",
                      config->subtitle_path, APP_RES_PATH);
         }
         argv[argc++] = "-vf";
         argv[argc++] = vf_str;
+    } else {
+        // No subtitle filters — disable ffplay's built-in subtitle stream decoder
+        // so it doesn't auto-render embedded subs (saves CPU, especially for HEVC)
+        argv[argc++] = "-sn";
+        if (scale_filter[0]) {
+            snprintf(vf_str, sizeof(vf_str), "%s", scale_filter);
+            argv[argc++] = "-vf";
+            argv[argc++] = vf_str;
+        }
     }
 
     // Window title
@@ -101,6 +132,12 @@ static int ffplay_exec(FfplayConfig* config, int use_subs) {
     // Common playback options for all sources
     argv[argc++] = "-framedrop";    // Drop frames if decoding too slow
     argv[argc++] = "-fast";         // Enable speed-optimized decoding
+    // Skip expensive decode steps — critical for HEVC on this ARM chip,
+    // negligible quality impact for H.264 on a small screen.
+    argv[argc++] = "-skip_loop_filter";  // Skip deblocking/SAO filter
+    argv[argc++] = "all";
+    argv[argc++] = "-skip_idct";         // Skip IDCT on non-reference frames
+    argv[argc++] = "noref";             // note: "noref" not "nonref"
 
     // Stream-specific buffering options
     if (config->is_stream) {

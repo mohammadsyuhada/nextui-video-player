@@ -204,6 +204,7 @@ ModuleExitReason SubscriptionsModule_run(SDL_Surface* screen) {
                 memset(&config, 0, sizeof(config));
                 config.source = FFPLAY_SOURCE_STREAM;
                 config.is_stream = true;
+                config.screen_width = screen->w;
                 strncpy(config.path, op->resolved_url, sizeof(config.path) - 1);
                 strncpy(config.title, r->title, sizeof(config.title) - 1);
 

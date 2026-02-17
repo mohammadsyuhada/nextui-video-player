@@ -94,6 +94,22 @@ A video playback application for NextUI featuring local file playback, YouTube s
 - Select a channel to stream
 - Add custom M3U playlist URLs
 
+## HEVC/H.265 Playback Limitations
+
+The device uses software video decoding (no hardware video decoder is exposed). HEVC/H.265 is significantly more CPU-intensive than H.264, especially at higher resolutions. The following optimizations are applied automatically for the best possible playback experience:
+
+- **Resolution cap**: Video is downscaled to the device's screen resolution before rendering, reducing post-decode work for 1080p+ content.
+- **Decoder optimizations**: Loop filter and IDCT skipping are enabled (`-skip_loop_filter all`, `-skip_idct noref`) to reduce decode CPU usage at the cost of minor visual artifacts.
+- **Frame dropping**: Frames are dropped when decoding falls behind audio to maintain sync.
+- **Embedded subtitles disabled for HEVC**: The subtitle overlay filter adds significant CPU overhead. Embedded subtitle streams are not rendered for HEVC files. External subtitle files (`.srt`, `.ass`) placed next to the video still work.
+- **CPU locked at max frequency**: The CPU is set to 2GHz (max) during the video player session to avoid frame drops from frequency scaling ramp-up.
+
+**Recommendations for HEVC content:**
+- Use 720p or lower resolution encodes for smooth playback
+- Prefer 8-bit over 10-bit color depth
+- Use external `.srt` subtitle files instead of embedded subtitles
+- H.264 encoded videos will always play more smoothly than HEVC on this hardware
+
 ## Building from Source
 
 ### Prerequisites

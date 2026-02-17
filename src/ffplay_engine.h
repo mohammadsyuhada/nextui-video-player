@@ -23,6 +23,9 @@ typedef struct {
     int subtitle_count;
     char subtitle_paths[MAX_SUBTITLE_FILES][512];
     char subtitle_labels[MAX_SUBTITLE_FILES][32];
+
+    int screen_width;  // Device screen width for resolution cap (0 = no cap)
+    bool is_hevc;      // true = HEVC/H.265 codec (enables aggressive decode opts)
 } FfplayConfig;
 
 // Play a video using ffplay subprocess

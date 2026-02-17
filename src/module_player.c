@@ -99,14 +99,18 @@ ModuleExitReason PlayerModule_run(SDL_Surface* screen) {
                     config.source = FFPLAY_SOURCE_LOCAL;
                     config.is_stream = false;
                     config.start_position_sec = 0;
+                    config.screen_width = screen->w;
+                    config.is_hevc = VideoBrowser_isHEVC(entry->path);
                     strncpy(config.path, entry->path, sizeof(config.path) - 1);
                     config.path[sizeof(config.path) - 1] = '\0';
+                    VideoBrowser_getDisplayName(entry->name, config.title, sizeof(config.title));
 
                     // Subtitle handling:
                     // 1. Multiple external files (.srt/.ass next to video) — always preferred
                     //    D-pad DOWN cycles through them + an "off" state
                     // 2. Embedded in video — uses video path as subtitle source,
                     //    but only for files under 500MB (dual-demux blocks on large files)
+                    //    Skipped for HEVC — subtitle overlay + HEVC decode is too CPU-heavy
                     SubtitleList sub_list;
                     VideoBrowser_findSubtitles(entry->path, &sub_list);
 
@@ -122,7 +126,10 @@ ModuleExitReason PlayerModule_run(SDL_Surface* screen) {
                         strncpy(config.subtitle_path, sub_list.entries[0].path, sizeof(config.subtitle_path) - 1);
                         config.subtitle_path[sizeof(config.subtitle_path) - 1] = '\0';
                         config.subtitle_is_external = true;
-                    } else {
+                    } else if (!config.is_hevc) {
+                        // Embedded subs: only for non-HEVC files under 500MB.
+                        // HEVC decode already saturates the CPU — adding the subtitle
+                        // overlay filter on top causes frame drops or audio-only playback.
                         struct stat vst;
                         if (stat(entry->path, &vst) == 0 && vst.st_size < (off_t)500 * 1024 * 1024) {
                             strncpy(config.subtitle_path, entry->path, sizeof(config.subtitle_path) - 1);
