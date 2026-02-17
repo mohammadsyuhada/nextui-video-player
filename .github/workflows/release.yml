@@ -35,7 +35,7 @@ jobs:
         run: |
           docker run --rm \
             -v ${{ github.workspace }}/NextUI/workspace:/root/workspace \
-            ghcr.io/loveretro/tg5040-toolchain:latest \
+            ghcr.io/loveretro/tg5050-toolchain:latest \
             /bin/bash -c 'source ~/.bashrc && cd /root/workspace/tg5050/libmsettings && make build CROSS_COMPILE=aarch64-nextui-linux-gnu- PREFIX=/opt/nextui PREFIX_LOCAL=/opt/nextui && cd /root/workspace/nextui-video-player/src && make PLATFORM=tg5050'
 
       - name: Package release zip
