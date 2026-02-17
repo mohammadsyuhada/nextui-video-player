@@ -52,8 +52,10 @@ static int ffplay_exec(FfplayConfig* config, int use_subs) {
         argv[argc++] = seek_str;
     }
 
-    // Cap decode resolution to screen width — decoding at higher resolution than
-    // the display is wasted CPU. min(w,iw) is a no-op for content already <= screen.
+    // Downscale decoded frames to screen width — reduces renderer workload by
+    // avoiding pushing more pixels than the display can show.
+    // Note: the decoder still works at full resolution; this is a post-decode scale.
+    // min(w,iw) is a no-op for content already <= screen width.
     char scale_filter[128] = "";
     if (config->screen_width > 0) {
         snprintf(scale_filter, sizeof(scale_filter),
@@ -148,6 +150,12 @@ static int ffplay_exec(FfplayConfig* config, int use_subs) {
         argv[argc++] = "5000000";       // 5 seconds analysis
         argv[argc++] = "-user_agent";   // YouTube CDN requires a browser User-Agent
         argv[argc++] = "Mozilla/5.0";
+        argv[argc++] = "-reconnect";
+        argv[argc++] = "1";
+        argv[argc++] = "-reconnect_streamed";
+        argv[argc++] = "1";
+        argv[argc++] = "-reconnect_delay_max";
+        argv[argc++] = "5";            // Retry up to 5s before giving up
     }
 
     // ClearKey decryption for DASH DRM streams (CENC)
