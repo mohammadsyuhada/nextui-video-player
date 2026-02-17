@@ -53,9 +53,20 @@ static int ffplay_exec(FfplayConfig* config, int use_subs) {
     }
 
     // Subtitle filter
+    // fontsdir: system fontconfig has no fonts, so point to our bundled font
+    // force_style: only for external subs (SRT has no styling); skip for embedded
+    //              ASS/SSA which have their own fonts and positioning
     char vf_str[1024];
     if (use_subs && config->subtitle_path[0] != '\0') {
-        snprintf(vf_str, sizeof(vf_str), "subtitles='%s'", config->subtitle_path);
+        if (config->subtitle_is_external) {
+            snprintf(vf_str, sizeof(vf_str),
+                     "subtitles='%s':fontsdir='%s/fonts':force_style='Fontname=Rounded Mplus 1c Bold,FontSize=32'",
+                     config->subtitle_path, APP_RES_PATH);
+        } else {
+            snprintf(vf_str, sizeof(vf_str),
+                     "subtitles='%s':fontsdir='%s/fonts'",
+                     config->subtitle_path, APP_RES_PATH);
+        }
         argv[argc++] = "-vf";
         argv[argc++] = vf_str;
     }
@@ -66,10 +77,13 @@ static int ffplay_exec(FfplayConfig* config, int use_subs) {
         argv[argc++] = config->title;
     }
 
-    // Stream buffering options
+    // Common playback options for all sources
+    argv[argc++] = "-framedrop";    // Drop frames if decoding too slow
+    argv[argc++] = "-fast";         // Enable speed-optimized decoding
+
+    // Stream-specific buffering options
     if (config->is_stream) {
         argv[argc++] = "-infbuf";       // Disable buffer size limit for live streams
-        argv[argc++] = "-framedrop";    // Drop frames if decoding too slow
         argv[argc++] = "-probesize";
         argv[argc++] = "5000000";       // 5MB probe size
         argv[argc++] = "-analyzeduration";
@@ -106,9 +120,13 @@ static int ffplay_exec(FfplayConfig* config, int use_subs) {
     }
 
     if (ffplay_pid == 0) {
-        // Child process: set audio device for SDL2 inside ffplay
+        // Child process: configure environment before exec
         if (bt_audio)
             setenv("AUDIODEV", "bluealsa", 1);
+        // Point fontconfig to our minimal config so it finds res/fonts/font.ttf
+        // without scanning the entire filesystem (avoids ~13s startup delay)
+        if (use_subs)
+            setenv("FONTCONFIG_FILE", APP_RES_PATH "/fonts.conf", 1);
         execv(FFPLAY_PATH, argv);
         _exit(127);
     }
@@ -146,9 +164,7 @@ int FfplayEngine_play(FfplayConfig* config) {
     LOG_info("ffplay: playing %s\n", config->path);
 
     // Release joysticks so ffplay can use them for input.
-    // Do NOT call GFX_quit() - it has a double-free bug in shared code
-    // (overlay_path + system fonts). ffplay will open /dev/fb0 independently
-    // via its own SDL2; both can mmap the framebuffer simultaneously.
+    // GFX is NOT released — ffplay opens its own SDL2 display independently.
     PAD_quit();
 
     int exit_code = ffplay_exec(config, config->subtitle_path[0] != '\0');
