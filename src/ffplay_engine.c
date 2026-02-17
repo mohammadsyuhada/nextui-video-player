@@ -8,10 +8,30 @@
 
 #include "vp_defines.h"
 #include "api.h"
+#include "msettings.h"
 #include "ffplay_engine.h"
 
 // PID of the currently running ffplay child process (0 = none)
 static pid_t ffplay_pid = 0;
+
+// Check if Bluetooth audio is active (via msettings or .asoundrc)
+static int is_bluetooth_audio(void) {
+    if (GetAudioSink() == AUDIO_SINK_BLUETOOTH) return 1;
+    const char* home = getenv("HOME");
+    if (home) {
+        char path[512];
+        snprintf(path, sizeof(path), "%s/.asoundrc", home);
+        FILE* f = fopen(path, "r");
+        if (f) {
+            char buf[256];
+            while (fgets(buf, sizeof(buf), f)) {
+                if (strstr(buf, "bluealsa")) { fclose(f); return 1; }
+            }
+            fclose(f);
+        }
+    }
+    return 0;
+}
 
 // Build argv for ffplay and exec in a forked child. Returns exit status.
 static int ffplay_exec(FfplayConfig* config, int use_subs) {
@@ -69,6 +89,15 @@ static int ffplay_exec(FfplayConfig* config, int use_subs) {
     argv[argc++] = config->path;
     argv[argc] = NULL;
 
+    // Set up Bluetooth audio routing before fork
+    int bt_audio = is_bluetooth_audio();
+    if (bt_audio) {
+        // Set BlueALSA mixer to 100% so audio is audible
+        system("amixer scontrols 2>/dev/null | grep -i 'A2DP' | "
+               "sed \"s/.*'\\([^']*\\)'.*/\\1/\" | "
+               "while read ctrl; do amixer sset \"$ctrl\" 127 2>/dev/null; done");
+    }
+
     // Fork and exec ffplay
     ffplay_pid = fork();
     if (ffplay_pid < 0) {
@@ -77,7 +106,9 @@ static int ffplay_exec(FfplayConfig* config, int use_subs) {
     }
 
     if (ffplay_pid == 0) {
-        // Child process: exec ffplay
+        // Child process: set audio device for SDL2 inside ffplay
+        if (bt_audio)
+            setenv("AUDIODEV", "bluealsa", 1);
         execv(FFPLAY_PATH, argv);
         _exit(127);
     }
