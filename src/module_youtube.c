@@ -186,7 +186,7 @@ ModuleExitReason YouTubeModule_run(SDL_Surface* screen) {
 
                 FfplayEngine_play(&config);
 
-                // Re-init after ffplay
+                // Re-init after ffplay (fonts/icons may need refresh)
                 Fonts_load();
                 Icons_init();
                 memset(&yt_scroll, 0, sizeof(yt_scroll));

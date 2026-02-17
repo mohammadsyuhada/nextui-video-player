@@ -10,7 +10,8 @@ typedef enum {
 
 typedef struct {
     char path[2048];          // Video file path or stream URL (YouTube URLs can be very long)
-    char subtitle_path[512];  // External subtitle file (empty = none)
+    char subtitle_path[512];  // Subtitle source: external file or video path (empty = none)
+    bool subtitle_is_external; // true = external .srt/.ass file, false = embedded in video
     char title[256];          // Window title (empty = use filename/URL)
     char decryption_key[64];  // ClearKey hex string for DASH DRM (empty = none)
     int start_position_sec;   // Seek position (0 = start)

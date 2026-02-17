@@ -8,7 +8,7 @@
 #include "config.h"
 #include "ui_fonts.h"
 
-#define APP_FONT_PATH "res/font.ttf"
+#define APP_FONT_PATH "res/fonts/font.ttf"
 #define FONT_TITLE_SIZE 28
 #define FONT_XLARGE_SIZE 36
 

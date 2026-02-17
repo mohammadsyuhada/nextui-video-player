@@ -42,7 +42,9 @@ A video playback application for NextUI featuring local file playback, YouTube s
 ### Local Video Playback
 - Supports `MP4`, `MKV`, `AVI`, `WEBM`, `MOV`, `FLV`, `M4V`, `WMV`, `MPEG`, `3GP` formats
 - File browser for navigating video libraries (Video files must be placed in `./Videos` folder)
-- Subtitle support (embedded SRT/ASS/SSA tracks in `.mkv` and other containers)
+- Subtitle support:
+  - **External subtitles** (`.srt`, `.ass`, `.ssa`, `.sub`): Place the subtitle file next to the video with a matching name. Works with any file size.
+  - **Embedded subtitles** (e.g., ASS/SSA tracks inside `.mkv`): Automatically rendered for files under 500 MB. For larger files, use external subtitle files instead.
 - On-screen display with progress bar, elapsed/total time
 
 ### YouTube Streaming

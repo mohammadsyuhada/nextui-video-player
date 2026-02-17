@@ -102,24 +102,29 @@ ModuleExitReason PlayerModule_run(SDL_Surface* screen) {
                     strncpy(config.path, entry->path, sizeof(config.path) - 1);
                     config.path[sizeof(config.path) - 1] = '\0';
 
-                    // Find matching subtitle file, or use video itself for embedded subs
+                    // Subtitle handling:
+                    // 1. External file (.srt/.ass next to video) — always preferred
+                    // 2. Embedded in video — uses video path as subtitle source,
+                    //    but only for files under 1GB (dual-demux blocks on large files)
                     char sub_path[512];
                     sub_path[0] = '\0';
                     if (VideoBrowser_findSubtitle(entry->path, sub_path, sizeof(sub_path))) {
                         strncpy(config.subtitle_path, sub_path, sizeof(config.subtitle_path) - 1);
                         config.subtitle_path[sizeof(config.subtitle_path) - 1] = '\0';
+                        config.subtitle_is_external = true;
                     } else {
-                        // No external subtitle found - use the video file itself
-                        // to render embedded subtitles (e.g. MKV with embedded SRT/ASS)
-                        strncpy(config.subtitle_path, entry->path, sizeof(config.subtitle_path) - 1);
-                        config.subtitle_path[sizeof(config.subtitle_path) - 1] = '\0';
+                        struct stat vst;
+                        if (stat(entry->path, &vst) == 0 && vst.st_size < (off_t)500 * 1024 * 1024) {
+                            strncpy(config.subtitle_path, entry->path, sizeof(config.subtitle_path) - 1);
+                            config.subtitle_path[sizeof(config.subtitle_path) - 1] = '\0';
+                            config.subtitle_is_external = false;
+                        }
                     }
 
                     // Disable autosleep during playback
                     ModuleCommon_setAutosleepDisabled(true);
 
                     // Launch ffplay (releases PAD, waits, re-inits PAD)
-                    // GFX is NOT released to avoid double-free bug in shared code
                     FfplayEngine_play(&config);
 
                     // Reset scroll state and force full redraw

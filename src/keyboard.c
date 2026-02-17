@@ -36,7 +36,7 @@ char* Keyboard_open(const char* prompt) {
     }
 
     // Use the same custom font as the rest of the application
-    const char* font_path = APP_RES_PATH "/font.ttf";
+    const char* font_path = APP_RES_PATH "/fonts/font.ttf";
 
     char cmd[1024];
     snprintf(cmd, sizeof(cmd), "%s \"%s\" 2>/dev/null", keyboard_path, font_path);
