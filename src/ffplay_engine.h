@@ -19,7 +19,7 @@ typedef struct {
 } FfplayConfig;
 
 // Play a video using ffplay subprocess
-// This function releases GFX/PAD, forks ffplay, waits for it to exit, then re-initializes GFX/PAD.
+// This function releases PAD, forks ffplay, waits for it to exit, then re-initializes PAD.
 // Returns the ffplay exit code (0 = normal exit, non-zero = error)
 int FfplayEngine_play(FfplayConfig* config);
 
