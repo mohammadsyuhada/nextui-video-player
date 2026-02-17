@@ -16,9 +16,10 @@
         },
         {
             "name": "TV3",
-            "url": "https://mifntechnology.github.io/siaranMy/channels/Tv3/index.m3u8",
+            "url": "https://unifi-live2.secureswiftcontent.com/Content/DASH/Live/channel(TV3)/master.mpd",
             "category": "General",
-            "logo": "https://github.com/MIFNtechnology/siaranMy/raw/main/logo/Tv3.png"
+            "logo": "https://github.com/MIFNtechnology/siaranMy/raw/main/logo/Tv3.png",
+            "decryption_key": "3d63855ca5cdfcfb765f306b98bcc646"
         },
         {
             "name": "TV6",

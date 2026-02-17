@@ -2412,13 +2412,15 @@ static int video_thread(void *arg)
                 goto the_end;
             }
             graph->nb_threads = filter_nbthreads;
-            if ((ret = configure_video_filters(graph, is, vfilters_list ? vfilters_list[is->vfilter_idx] : NULL, frame)) < 0) {
+            // Treat empty vfilter string as NULL (passthrough = no subtitles)
+            const char *cur_vf = (vfilters_list && vfilters_list[is->vfilter_idx] && vfilters_list[is->vfilter_idx][0] != '\0')
+                                 ? vfilters_list[is->vfilter_idx] : NULL;
+            if ((ret = configure_video_filters(graph, is, cur_vf, frame)) < 0) {
                 // If filter failed and we had vfilters (e.g. subtitles filter on a
                 // file with no subtitle streams), retry without the filter
-                const char *vf = vfilters_list ? vfilters_list[is->vfilter_idx] : NULL;
-                if (vf && vf[0] != '\0') {
+                if (cur_vf) {
                     av_log(NULL, AV_LOG_WARNING,
-                           "Video filter '%s' failed, continuing without it\n", vf);
+                           "Video filter '%s' failed, continuing without it\n", cur_vf);
                     avfilter_graph_free(&graph);
                     graph = avfilter_graph_alloc();
                     if (graph) {
@@ -3640,10 +3642,26 @@ static void event_loop(VideoState *cur_stream)
                 incr = seek_interval ? seek_interval : 10.0;
                 goto do_seek;
             case SDLK_UP:
-                incr = 60.0;
-                goto do_seek;
+                {
+                    double pos = get_clock(&cur_stream->vidclk);
+                    stream_cycle_channel(cur_stream, AVMEDIA_TYPE_AUDIO);
+                    if (!isnan(pos))
+                        stream_seek(cur_stream, (int64_t)(pos * AV_TIME_BASE), 0, 0);
+                }
+                break;
             case SDLK_DOWN:
-                incr = -60.0;
+                if (nb_vfilters > 1) {
+                    // Cycle through external subtitle vfilters (including "off")
+                    if (++cur_stream->vfilter_idx >= nb_vfilters)
+                        cur_stream->vfilter_idx = 0;
+                    const char *sv = vfilters_list[cur_stream->vfilter_idx];
+                    av_log(NULL, AV_LOG_INFO, "Subtitle filter %d/%d: %s\n",
+                           cur_stream->vfilter_idx + 1, nb_vfilters,
+                           (sv && sv[0] != '\0') ? sv : "(off)");
+                } else {
+                    stream_cycle_channel(cur_stream, AVMEDIA_TYPE_SUBTITLE);
+                }
+                break;
             do_seek:
                     if (seek_by_bytes) {
                         pos = -1;
@@ -3775,8 +3793,8 @@ static void event_loop(VideoState *cur_stream)
                 break;
             }
             break;
-        /* D-pad hat mapping: left/right = seek +-10s, up/down = seek +-60s
-         * Tracks held state for continuous seeking */
+        /* D-pad hat mapping: left/right = seek +-10s, up = cycle audio, down = cycle subtitle
+         * Tracks held state for continuous seeking (left/right only) */
         case SDL_JOYHATMOTION:
             switch (event.jhat.value) {
             case SDL_HAT_LEFT:
@@ -3790,15 +3808,25 @@ static void event_loop(VideoState *cur_stream)
                 incr = 10.0;
                 goto do_seek;
             case SDL_HAT_UP:
-                osd_show();
-                hat_held_direction = SDL_HAT_UP;
-                incr = 60.0;
-                goto do_seek;
+                {
+                    double pos = get_clock(&cur_stream->vidclk);
+                    stream_cycle_channel(cur_stream, AVMEDIA_TYPE_AUDIO);
+                    if (!isnan(pos))
+                        stream_seek(cur_stream, (int64_t)(pos * AV_TIME_BASE), 0, 0);
+                }
+                break;
             case SDL_HAT_DOWN:
-                osd_show();
-                hat_held_direction = SDL_HAT_DOWN;
-                incr = -60.0;
-                goto do_seek;
+                if (nb_vfilters > 1) {
+                    if (++cur_stream->vfilter_idx >= nb_vfilters)
+                        cur_stream->vfilter_idx = 0;
+                    const char *sv = vfilters_list[cur_stream->vfilter_idx];
+                    av_log(NULL, AV_LOG_INFO, "Subtitle filter %d/%d: %s\n",
+                           cur_stream->vfilter_idx + 1, nb_vfilters,
+                           (sv && sv[0] != '\0') ? sv : "(off)");
+                } else {
+                    stream_cycle_channel(cur_stream, AVMEDIA_TYPE_SUBTITLE);
+                }
+                break;
             case SDL_HAT_CENTERED:
             default:
                 hat_held_direction = 0;

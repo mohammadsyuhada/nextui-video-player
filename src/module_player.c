@@ -103,13 +103,23 @@ ModuleExitReason PlayerModule_run(SDL_Surface* screen) {
                     config.path[sizeof(config.path) - 1] = '\0';
 
                     // Subtitle handling:
-                    // 1. External file (.srt/.ass next to video) — always preferred
+                    // 1. Multiple external files (.srt/.ass next to video) — always preferred
+                    //    D-pad DOWN cycles through them + an "off" state
                     // 2. Embedded in video — uses video path as subtitle source,
-                    //    but only for files under 1GB (dual-demux blocks on large files)
-                    char sub_path[512];
-                    sub_path[0] = '\0';
-                    if (VideoBrowser_findSubtitle(entry->path, sub_path, sizeof(sub_path))) {
-                        strncpy(config.subtitle_path, sub_path, sizeof(config.subtitle_path) - 1);
+                    //    but only for files under 500MB (dual-demux blocks on large files)
+                    SubtitleList sub_list;
+                    VideoBrowser_findSubtitles(entry->path, &sub_list);
+
+                    if (sub_list.count > 0) {
+                        config.subtitle_count = sub_list.count;
+                        for (int si = 0; si < sub_list.count; si++) {
+                            strncpy(config.subtitle_paths[si], sub_list.entries[si].path, sizeof(config.subtitle_paths[0]) - 1);
+                            config.subtitle_paths[si][sizeof(config.subtitle_paths[0]) - 1] = '\0';
+                            strncpy(config.subtitle_labels[si], sub_list.entries[si].label, sizeof(config.subtitle_labels[0]) - 1);
+                            config.subtitle_labels[si][sizeof(config.subtitle_labels[0]) - 1] = '\0';
+                        }
+                        // Also set legacy fields to the first subtitle for compatibility
+                        strncpy(config.subtitle_path, sub_list.entries[0].path, sizeof(config.subtitle_path) - 1);
                         config.subtitle_path[sizeof(config.subtitle_path) - 1] = '\0';
                         config.subtitle_is_external = true;
                     } else {

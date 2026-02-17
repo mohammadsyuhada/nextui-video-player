@@ -212,6 +212,23 @@ bool VideoBrowser_hasParent(const VideoBrowserContext* ctx) {
     return ctx->entry_count > 0 && strcmp(ctx->entries[0].name, "..") == 0;
 }
 
+// Subtitle extensions used by both single and multi-subtitle discovery
+static const char* sub_exts[] = {
+    SUB_EXT_SRT,
+    SUB_EXT_ASS,
+    SUB_EXT_SSA,
+    SUB_EXT_SUB,
+    NULL
+};
+
+// Check if a filename extension is a subtitle extension
+static bool is_subtitle_ext(const char* ext) {
+    for (int i = 0; sub_exts[i] != NULL; i++) {
+        if (strcasecmp(ext, sub_exts[i]) == 0) return true;
+    }
+    return false;
+}
+
 // Find subtitle file matching video
 // Given /path/movie.mp4, checks for /path/movie.srt, .ass, .ssa, .sub
 bool VideoBrowser_findSubtitle(const char* video_path, char* sub_path, int sub_path_size) {
@@ -228,14 +245,6 @@ bool VideoBrowser_findSubtitle(const char* video_path, char* sub_path, int sub_p
     }
 
     // Try each subtitle extension
-    static const char* sub_exts[] = {
-        SUB_EXT_SRT,
-        SUB_EXT_ASS,
-        SUB_EXT_SSA,
-        SUB_EXT_SUB,
-        NULL
-    };
-
     for (int i = 0; sub_exts[i] != NULL; i++) {
         snprintf(sub_path, sub_path_size, "%s.%s", base, sub_exts[i]);
         if (access(sub_path, F_OK) == 0) {
@@ -245,4 +254,126 @@ bool VideoBrowser_findSubtitle(const char* video_path, char* sub_path, int sub_p
 
     sub_path[0] = '\0';
     return false;
+}
+
+// Find all subtitle files matching a video.
+// First pass: exact base name matches (movie.srt, movie.ass, etc.)
+// Second pass: scan directory for language-tagged files (movie.en.srt, movie.ja.ass, etc.)
+void VideoBrowser_findSubtitles(const char* video_path, SubtitleList* list) {
+    list->count = 0;
+    if (!video_path) return;
+
+    // Extract directory and base name (without extension)
+    char dir_path[512];
+    char base_name[256];
+    strncpy(dir_path, video_path, sizeof(dir_path) - 1);
+    dir_path[sizeof(dir_path) - 1] = '\0';
+
+    char* last_slash = strrchr(dir_path, '/');
+    if (!last_slash) return;
+
+    // Split into directory and filename
+    *last_slash = '\0';
+    const char* filename = last_slash + 1;
+
+    // Get base name without video extension
+    strncpy(base_name, filename, sizeof(base_name) - 1);
+    base_name[sizeof(base_name) - 1] = '\0';
+    char* dot = strrchr(base_name, '.');
+    if (dot) *dot = '\0';
+    int base_len = strlen(base_name);
+
+    // First pass: exact base name matches (movie.srt, movie.ass, etc.)
+    for (int i = 0; sub_exts[i] != NULL && list->count < MAX_SUBTITLE_FILES; i++) {
+        char sub_path[1024];
+        int n = snprintf(sub_path, sizeof(sub_path), "%s/%s.%s", dir_path, base_name, sub_exts[i]);
+        if (n < 0 || n >= (int)sizeof(sub_path)) continue;
+        if (access(sub_path, F_OK) == 0) {
+            strncpy(list->entries[list->count].path, sub_path, sizeof(list->entries[0].path) - 1);
+            list->entries[list->count].path[sizeof(list->entries[0].path) - 1] = '\0';
+            strncpy(list->entries[list->count].label, sub_exts[i], sizeof(list->entries[0].label) - 1);
+            list->entries[list->count].label[sizeof(list->entries[0].label) - 1] = '\0';
+            list->count++;
+        }
+    }
+
+    // Second pass: scan directory for any subtitle file starting with base name
+    // Supports patterns like: movie.en.srt, movie.ja.ass, movie(Malay).srt, movie_english.sub
+    DIR* dir = opendir(dir_path);
+    if (!dir) return;
+
+    struct dirent* ent;
+    while ((ent = readdir(dir)) != NULL && list->count < MAX_SUBTITLE_FILES) {
+        if (ent->d_name[0] == '.') continue;
+
+        // Must start with base name (case-insensitive)
+        if (strncasecmp(ent->d_name, base_name, base_len) != 0) continue;
+
+        // The character after base name must not be alphanumeric
+        // (prevents "movieExtra.srt" matching "movie")
+        char after = ent->d_name[base_len];
+        if (after == '\0') continue;  // Just the base name, no extension
+        if (isalnum((unsigned char)after)) continue;
+
+        // Get the subtitle extension
+        const char* sub_dot = strrchr(ent->d_name, '.');
+        if (!sub_dot || sub_dot == ent->d_name) continue;
+        if (!is_subtitle_ext(sub_dot + 1)) continue;
+
+        // Build full path
+        char sub_path[1024];
+        int n = snprintf(sub_path, sizeof(sub_path), "%s/%s", dir_path, ent->d_name);
+        if (n < 0 || n >= (int)sizeof(sub_path)) continue;
+
+        // Check for duplicates (exact matches found in first pass)
+        bool dup = false;
+        for (int j = 0; j < list->count; j++) {
+            if (strcmp(list->entries[j].path, sub_path) == 0) {
+                dup = true;
+                break;
+            }
+        }
+        if (dup) continue;
+
+        // Extract label from the part between base name and subtitle extension
+        // e.g. "movie.en.srt" -> "en", "movie(Malay).srt" -> "Malay", "movie.bm.srt" -> "bm"
+        const char* middle_start = ent->d_name + base_len;
+        int middle_len = sub_dot - middle_start;
+        char label[32];
+
+        if (middle_len > 0) {
+            // Strip leading separators (.  _  -  ( ) from label
+            const char* lbl_start = middle_start;
+            const char* lbl_end = sub_dot;
+
+            // Skip leading punctuation/separators
+            while (lbl_start < lbl_end && !isalnum((unsigned char)*lbl_start))
+                lbl_start++;
+            // Skip trailing punctuation/separators
+            while (lbl_end > lbl_start && !isalnum((unsigned char)*(lbl_end - 1)))
+                lbl_end--;
+
+            int lbl_len = lbl_end - lbl_start;
+            if (lbl_len <= 0) {
+                // No meaningful label, use the subtitle extension
+                strncpy(label, sub_dot + 1, sizeof(label) - 1);
+                label[sizeof(label) - 1] = '\0';
+            } else {
+                int copy_len = lbl_len < (int)(sizeof(label) - 1) ? lbl_len : (int)(sizeof(label) - 1);
+                strncpy(label, lbl_start, copy_len);
+                label[copy_len] = '\0';
+            }
+        } else {
+            strncpy(label, sub_dot + 1, sizeof(label) - 1);
+            label[sizeof(label) - 1] = '\0';
+        }
+
+        strncpy(list->entries[list->count].path, sub_path, sizeof(list->entries[0].path) - 1);
+        list->entries[list->count].path[sizeof(list->entries[0].path) - 1] = '\0';
+        strncpy(list->entries[list->count].label, label, sizeof(list->entries[0].label) - 1);
+        list->entries[list->count].label[sizeof(list->entries[0].label) - 1] = '\0';
+        list->count++;
+    }
+
+    closedir(dir);
 }

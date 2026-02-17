@@ -44,4 +44,20 @@ bool VideoBrowser_hasParent(const VideoBrowserContext* ctx);
 // Find subtitle file matching video (returns true if found, fills sub_path)
 bool VideoBrowser_findSubtitle(const char* video_path, char* sub_path, int sub_path_size);
 
+// Multi-subtitle support
+#define MAX_SUBTITLE_FILES 8
+
+typedef struct {
+    char path[512];
+    char label[32];  // e.g. "srt", "en", "ja"
+} SubtitleEntry;
+
+typedef struct {
+    SubtitleEntry entries[MAX_SUBTITLE_FILES];
+    int count;
+} SubtitleList;
+
+// Find all subtitle files matching a video (exact match + language-tagged)
+void VideoBrowser_findSubtitles(const char* video_path, SubtitleList* list);
+
 #endif
