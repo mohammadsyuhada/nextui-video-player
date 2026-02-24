@@ -51,6 +51,8 @@ int main(int argc, char* argv[]) {
     (void)argv;
 
     screen = GFX_init(MODE_MAIN);
+    PWR_pinToCores(CPU_CORE_PERFORMANCE);
+    
     // Load bundled fonts
     Fonts_load();
 
