@@ -16,7 +16,7 @@ jobs:
       - name: Checkout NextUI (build dependencies)
         uses: actions/checkout@v4
         with:
-          repository: mohammadsyuhada/NextUI
+          repository: LoveRetro/NextUI
           path: NextUI
 
       - name: Checkout Video Player
