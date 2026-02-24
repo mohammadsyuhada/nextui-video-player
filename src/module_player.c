@@ -38,6 +38,7 @@ ModuleExitReason PlayerModule_run(SDL_Surface* screen) {
     memset(&browser_scroll, 0, sizeof(browser_scroll));
 
     while (1) {
+        GFX_startFrame();
         PAD_poll();
 
         // Handle global input (START dialogs, volume, etc.)
@@ -143,6 +144,12 @@ ModuleExitReason PlayerModule_run(SDL_Surface* screen) {
 
                     // Launch ffplay (releases PAD, waits, re-inits PAD)
                     FfplayEngine_play(&config);
+
+                    // TG5050: display recovery creates a new screen surface
+					{
+						SDL_Surface* ns = FfplayEngine_getReinitScreen();
+						if (ns) screen = ns;
+					}
 
                     // Reset scroll state and force full redraw
                     memset(&browser_scroll, 0, sizeof(browser_scroll));

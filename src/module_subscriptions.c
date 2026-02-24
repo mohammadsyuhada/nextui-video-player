@@ -162,6 +162,7 @@ ModuleExitReason SubscriptionsModule_run(SDL_Surface* screen) {
     }
 
     while (1) {
+        GFX_startFrame();
         PAD_poll();
 
         const SubscriptionList* subs = Subscriptions_getList();

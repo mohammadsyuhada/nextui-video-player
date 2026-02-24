@@ -25,6 +25,7 @@ ModuleExitReason SettingsModule_run(SDL_Surface* screen) {
     int show_setting = 0;
 
     while (1) {
+        GFX_startFrame();
         PAD_poll();
 
         // Handle global input first
