@@ -369,6 +369,11 @@ static double get_master_clock(VideoState *is);
 /* OSD (on-screen display) state */
 static int osd_visible = 0;
 static int64_t osd_last_activity = 0;
+
+/* Aspect ratio toggle: 0=original, 1=16:9, 2=4:3 */
+static int aspect_mode = 0;
+static int64_t aspect_osd_until = 0;  /* show aspect label until this time */
+#define ASPECT_OSD_DURATION_US 2000000 /* 2 seconds */
 #define OSD_TIMEOUT_US 4000000  /* auto-hide after 4 seconds */
 #define OSD_BAR_HEIGHT 8
 #define OSD_MARGIN 24
@@ -411,6 +416,8 @@ static const unsigned char font_5x7[][7] = {
     /* S (17) */ {0x0E,0x11,0x10,0x0E,0x01,0x11,0x0E},
     /* E (18) */ {0x1F,0x10,0x10,0x1E,0x10,0x10,0x1F},
     /* D (19) */ {0x1C,0x12,0x11,0x11,0x11,0x12,0x1C},
+    /* T (20) */ {0x1F,0x04,0x04,0x04,0x04,0x04,0x04},
+    /* O (21) */ {0x0E,0x11,0x11,0x11,0x11,0x11,0x0E},
 };
 
 static int font_char_index(char c) {
@@ -425,6 +432,8 @@ static int font_char_index(char c) {
     if (c == 'S') return 17;
     if (c == 'E') return 18;
     if (c == 'D') return 19;
+    if (c == 'T') return 20;
+    if (c == 'O') return 21;
     return 12; /* space for unknown */
 }
 
@@ -577,6 +586,7 @@ static void osd_draw(VideoState *is) {
                       h - OSD_BG_HEIGHT + OSD_TEXT_Y_OFFSET,
                       "PAUSED", text_scale, 255, 200, 0, 230);
     }
+
 
     /* Progress bar */
     bar_x = OSD_MARGIN;
@@ -1116,6 +1126,12 @@ static void calculate_display_rect(SDL_Rect *rect,
 
     aspect_ratio = av_mul_q(aspect_ratio, av_make_q(pic_width, pic_height));
 
+    /* Override aspect ratio if forced mode is active */
+    if (aspect_mode == 1)
+        aspect_ratio = av_make_q(16, 9);
+    else if (aspect_mode == 2)
+        aspect_ratio = av_make_q(4, 3);
+
     /* XXX: we suppose the screen has a 1.0 pixel ratio */
     height = scr_height;
     width = av_rescale(height, aspect_ratio.num, aspect_ratio.den) & ~1;
@@ -1606,6 +1622,33 @@ static void video_display(VideoState *is)
     else if (is->video_st)
         video_image_display(is);
     osd_draw(is);
+
+    /* Aspect ratio label (shown briefly after toggle, independent of OSD) */
+    if (aspect_osd_until > 0) {
+        if (av_gettime_relative() < aspect_osd_until) {
+            int aw = 0, ah = 0;
+            SDL_GetRendererOutputSize(renderer, &aw, &ah);
+            if (aw > 0 && ah > 0) {
+                const char *label = aspect_mode == 1 ? "16:9" :
+                                    aspect_mode == 2 ? "4:3" : "AUTO";
+                int label_len = (int)strlen(label);
+                int scale = 4;
+                int label_w = label_len * 6 * scale;
+                int label_h = 7 * scale;
+                int lx = (aw - label_w) / 2;
+                int ly = (ah - label_h) / 2;
+                /* Background box */
+                SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+                SDL_Rect bg = { lx - 12, ly - 8, label_w + 24, label_h + 16 };
+                SDL_SetRenderDrawColor(renderer, 0, 0, 0, 180);
+                SDL_RenderFillRect(renderer, &bg);
+                osd_draw_text(lx, ly, label, scale, 255, 255, 255, 230);
+            }
+        } else {
+            aspect_osd_until = 0;
+        }
+    }
+
     SDL_RenderPresent(renderer);
 }
 
@@ -3764,8 +3807,8 @@ static void event_loop(VideoState *cur_stream)
             do_exit(cur_stream);
             break;
         /* Gamepad button mapping for TrimUI handheld:
-         * B (btn 0) = quit, A (btn 1) = pause,
-         * L1 (btn 4) = seek -60s, R1 (btn 5) = seek +60s */
+         * B (btn 0) = quit, A (btn 1) = pause, Y (btn 2) = cycle aspect ratio,
+         * X (btn 3) = toggle OSD, L1 (btn 4) = seek -60s, R1 (btn 5) = seek +60s */
         case SDL_JOYBUTTONDOWN:
             switch (event.jbutton.button) {
             case 0: /* B = quit */
@@ -3783,6 +3826,11 @@ static void event_loop(VideoState *cur_stream)
                 osd_show();
                 incr = 60.0;
                 goto do_seek;
+            case 2: /* Y = cycle aspect ratio */
+                aspect_mode = (aspect_mode + 1) % 3;
+                aspect_osd_until = av_gettime_relative() + ASPECT_OSD_DURATION_US;
+                cur_stream->force_refresh = 1;
+                break;
             case 3: /* X = toggle OSD */
                 if (osd_visible)
                     osd_visible = 0;
